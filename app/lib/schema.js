@@ -8,7 +8,6 @@ export const onboardingSchema = z.object({
     required_error: "Please select a specialization",
   }),
   bio: z.string().max(500).optional(),
-  // This is the updated section for 'experience'
   experience: z.preprocess(
     (val) => (typeof val === 'string' && val.trim() !== '' ? parseInt(val, 10) : Number(val)),
     z
@@ -30,16 +29,16 @@ export const contactSchema = z.object({
   email: z.string().email("Invalid email address"),
   mobile: z.string().optional(),
   linkedin: z.string().optional(),
-  twitter: z.string().optional(),
+  github: z.string().optional(),
 });
 
 export const entrySchema = z
   .object({
     title: z.string().min(1, "Title is required"),
-    organization: z.string().min(1, "Organization is required"),
+    organization: z.string().optional(),
     startDate: z.string().min(1, "Start date is required"),
     endDate: z.string().optional(),
-    description: z.string().min(1, "Description is required"),
+    description: z.string().optional(),
     current: z.boolean().default(false),
   })
   .refine(
@@ -58,7 +57,12 @@ export const entrySchema = z
 export const resumeSchema = z.object({
   contactInfo: contactSchema,
   summary: z.string().min(1, "Professional summary is required"),
-  skills: z.string().min(1, "Skills are required"),
+  skills: z.array(
+    z.object({
+      heading: z.string().optional(),
+      skills: z.string().optional(),
+    })
+  ).max(5),
   experience: z.array(entrySchema),
   education: z.array(entrySchema),
   projects: z.array(entrySchema),
