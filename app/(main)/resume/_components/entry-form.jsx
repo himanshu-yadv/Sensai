@@ -27,8 +27,15 @@ const formatDisplayDate = (dateString) => {
   return format(date, "MMM yyyy");
 };
 
+const parseDisplayDate = (dateString) => {
+  if (!dateString) return "";
+  const date = parse(dateString, "MMM yyyy", new Date());
+  return format(date, "yyyy-MM");
+};
+
 export function EntryForm({ type, entries, onChange }) {
   const [isAdding, setIsAdding] = useState(false);
+  const [editingIndex, setEditingIndex] = useState(null);
 
   const {
     register,
@@ -58,11 +65,30 @@ export function EntryForm({ type, entries, onChange }) {
       endDate: data.current ? "" : formatDisplayDate(data.endDate),
     };
 
-    onChange([...entries, formattedEntry]);
+    const newEntries = [...entries];
+    if (editingIndex !== null) {
+      newEntries[editingIndex] = formattedEntry;
+    } else {
+      newEntries.push(formattedEntry);
+    }
+    onChange(newEntries);
 
     reset();
     setIsAdding(false);
+    setEditingIndex(null);
   });
+
+  const handleEdit = (index) => {
+    const entry = entries[index];
+    setValue("title", entry.title);
+    setValue("organization", entry.organization);
+    setValue("startDate", parseDisplayDate(entry.startDate));
+    setValue("endDate", parseDisplayDate(entry.endDate));
+    setValue("description", entry.description);
+    setValue("current", entry.current);
+    setEditingIndex(index);
+    setIsAdding(true);
+  };
 
   const handleDelete = (index) => {
     const newEntries = entries.filter((_, i) => i !== index);
@@ -76,7 +102,6 @@ export function EntryForm({ type, entries, onChange }) {
     error: improveError,
   } = useFetch(improveWithAI);
 
-  // Add this effect to handle the improvement result
   useEffect(() => {
     if (improvedContent && !isImproving) {
       setValue("description", improvedContent);
@@ -87,7 +112,6 @@ export function EntryForm({ type, entries, onChange }) {
     }
   }, [improvedContent, improveError, isImproving, setValue]);
 
-  // Replace handleImproveDescription with this
   const handleImproveDescription = async () => {
     const description = watch("description");
     if (!description) {
@@ -97,7 +121,7 @@ export function EntryForm({ type, entries, onChange }) {
 
     await improveWithAIFn({
       current: description,
-      type: type.toLowerCase(), // 'experience', 'education', or 'project'
+      type: type.toLowerCase(),
     });
   };
 
@@ -108,16 +132,26 @@ export function EntryForm({ type, entries, onChange }) {
           <Card key={index}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                {item.title} @ {item.organization}
+                {item.title} {item.organization && `| ${item.organization}`}
               </CardTitle>
-              <Button
-                variant="outline"
-                size="icon"
-                type="button"
-                onClick={() => handleDelete(index)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  type="button"
+                  onClick={() => handleEdit(index)}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  type="button"
+                  onClick={() => handleDelete(index)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
@@ -125,9 +159,11 @@ export function EntryForm({ type, entries, onChange }) {
                   ? `${item.startDate} - Present`
                   : `${item.startDate} - ${item.endDate}`}
               </p>
-              <p className="mt-2 text-sm whitespace-pre-wrap">
-                {item.description}
-              </p>
+              {item.description && (
+                <p className="mt-2 text-sm whitespace-pre-wrap">
+                  {item.description}
+                </p>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -136,32 +172,37 @@ export function EntryForm({ type, entries, onChange }) {
       {isAdding && (
         <Card>
           <CardHeader>
-            <CardTitle>Add {type}</CardTitle>
+            <CardTitle>
+              {editingIndex !== null ? `Edit ${type}` : `Add ${type}`}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Input
-                  placeholder="Title/Position"
+                  placeholder={
+                    type === "Education" ? "Degree/Certificate" : "Title/Position"
+                  }
                   {...register("title")}
                   error={errors.title}
                 />
                 {errors.title && (
-                  <p className="text-sm text-red-500">{errors.title.message}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Input
-                  placeholder="Organization/Company"
-                  {...register("organization")}
-                  error={errors.organization}
-                />
-                {errors.organization && (
                   <p className="text-sm text-red-500">
-                    {errors.organization.message}
+                    {errors.title.message}
                   </p>
                 )}
               </div>
+              {type !== "Project" && (
+                <div className="space-y-2">
+                  <Input
+                    placeholder={
+                      type === "Education" ? "Institution" : "Company"
+                    }
+                    {...register("organization")}
+                    error={errors.organization}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -195,7 +236,7 @@ export function EntryForm({ type, entries, onChange }) {
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                id="current"
+                id={`current-${type}`}
                 {...register("current")}
                 onChange={(e) => {
                   setValue("current", e.target.checked);
@@ -204,41 +245,43 @@ export function EntryForm({ type, entries, onChange }) {
                   }
                 }}
               />
-              <label htmlFor="current">Current {type}</label>
+              <label htmlFor={`current-${type}`}>Current {type}</label>
             </div>
 
-            <div className="space-y-2">
-              <Textarea
-                placeholder={`Description of your ${type.toLowerCase()}`}
-                className="h-32"
-                {...register("description")}
-                error={errors.description}
-              />
-              {errors.description && (
-                <p className="text-sm text-red-500">
-                  {errors.description.message}
-                </p>
-              )}
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleImproveDescription}
-              disabled={isImproving || !watch("description")}
-            >
-              {isImproving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Improving...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Improve with AI
-                </>
-              )}
-            </Button>
+            {type !== "Education" && (
+              <div className="space-y-2">
+                <Textarea
+                  placeholder={`Description of your ${type.toLowerCase()}`}
+                  className="h-32"
+                  {...register("description")}
+                  error={errors.description}
+                />
+                {errors.description && (
+                  <p className="text-sm text-red-500">
+                    {errors.description.message}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleImproveDescription}
+                  disabled={isImproving || !watch("description")}
+                >
+                  {isImproving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Improving...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Improve with AI
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </CardContent>
           <CardFooter className="flex justify-end space-x-2">
             <Button
@@ -247,13 +290,23 @@ export function EntryForm({ type, entries, onChange }) {
               onClick={() => {
                 reset();
                 setIsAdding(false);
+                setEditingIndex(null);
               }}
             >
               Cancel
             </Button>
             <Button type="button" onClick={handleAdd}>
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Add Entry
+              {editingIndex !== null ? (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save
+                </>
+              ) : (
+                <>
+                  <PlusCircle className="h-4 w-4 mr-2" />
+                  Add Entry
+                </>
+              )}
             </Button>
           </CardFooter>
         </Card>
